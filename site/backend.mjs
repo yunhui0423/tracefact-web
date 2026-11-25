@@ -1,4 +1,5 @@
 
+function decodeChunks(chunks){return new TextDecoder().decode(Uint8Array.from(chunks.flatMap(chunk=>Array.from(chunk))));}
 const verdicts = ['支持', '反駁', '證據衝突', '證據不足'];
 const relations = ['支持', '反駁', '無關', '待確認'];
 function fail(message, status = 400) { const e = new Error(message); e.status = status; throw e; }

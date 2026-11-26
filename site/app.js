@@ -1,4 +1,4 @@
-import {localResponse,sourcePassage,validEvidenceQuote} from './backend.mjs?v=6';
+import {localResponse,sourcePassage,validEvidenceQuote} from './backend.mjs?v=7';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 let current = null, sources = [], status = null, timer, demoMode=false;
@@ -45,7 +45,7 @@ function evidenceHTML(e, cl) {
 }
 function renderCase() {
   const c = current;
-  if(c.retrieval_version!==2){$('#results').innerHTML='<div class="notice"><b>這是舊版檢索紀錄。</b><p>舊版可能只因共同片段推薦無關報告。原始紀錄保留，請重新查核以套用新版篩選。</p><button class="primary rerun-case">重新查核這則訊息</button></div>';return;}
+  if(c.retrieval_version!==3){$('#results').innerHTML='<div class="notice"><b>這是舊版檢索紀錄。</b><p>舊版可能只因共同片段推薦無關報告。原始紀錄保留，請重新查核以套用新版篩選。</p><button class="primary rerun-case">重新查核這則訊息</button></div>';return;}
   const withCandidates=c.claims.filter(cl=>cl.evidence.length).length;
   const reviewed=c.claims.filter(cl=>cl.reviewed).length;
   const summary=`<section class="case-summary"><div><span>查核進度</span><h2>${reviewed===c.claims.length?'已完成你的人工覆核':'需要繼續查證'}</h2><p>${withCandidates===0?'目前沒有通過篩選的候選報告。請補充對象或條件，避免以不相干資料下結論。':'已找到候選報告，請核對原始報告的對象、條件與內文；找到報告不代表主張已被證實。'}</p></div><div class="case-metrics"><span><b>${withCandidates}/${c.claims.length}</b>主張有候選資料</span><span><b>${reviewed}/${c.claims.length}</b>主張完成人工覆核</span></div></section>`;

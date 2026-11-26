@@ -26,6 +26,11 @@ test('共享一個泛用詞不足以連結不同主題',()=>{
   {id:'b',title:'雞蛋殼顏色與營養價值無關',content:'雞蛋顏色與營養沒有必然關係'}
  ]).map(x=>x.id),['b']);
 });
+test('相同主題不同問題：蛋殼顏色不能配到冷水煮蛋',()=>{
+ const sources=[{id:'color',title:'雞蛋顏色與營養價值',content:'雞蛋顏色與營養價值無關。'},
+ {id:'boil',title:'冷水煮雞蛋與營養價值',content:'冷水煮雞蛋不會讓營養價值流失。'}];
+ assert.deepEqual(rank('雞蛋顏色與營養價值',sources).map(e=>e.id),['color']);
+});
 test('相反說法仍保留為候選，相關性不取代真假判定',()=>{
  const sources=[{id:'a',title:'雞蛋顏色不能代表營養價值',content:'雞蛋顏色與營養價值無關。'}];
  const result=rank('雞蛋顏色代表營養價值',sources);

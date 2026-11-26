@@ -4,6 +4,7 @@ function decodeChunks(chunks){return new TextDecoder().decode(Uint8Array.from(ch
 
 
 
+
 const verdicts = ['支持', '反駁', '證據衝突', '證據不足'];
 const relations = ['支持', '反駁', '無關', '待確認'];
 function fail(message, status = 400) { const e = new Error(message); e.status = status; throw e; }
@@ -49,7 +50,7 @@ function retrievalProfile(value) {
   const clean=String(value).normalize('NFKC').toLowerCase().replace(/https?:\/\/\S+|[\w.+-]+@[\w.-]+\.[a-z]+/gi,' ');
   const words=[...new Intl.Segmenter('zh-Hant',{granularity:'word'}).segment(clean)].filter(x=>x.isWordLike).map(x=>x.segment);
   const terms=[...new Set(words.filter(w=>w.length>=2&&w.length<=40&&!RETRIEVAL_STOP.has(w)&&!/^\d+$/.test(w)&&!(/^[一二三四五六七八九十百零兩]+(?:點|時|日|月|年)?$/.test(w))&&!/^(?:就|都|也|還)?(?:不|沒)?(?:能|會|可以|一定|可能|必須|需要|應該|不能|不會)$/.test(w)))].slice(0,12);
-  return {terms,minimum:terms.length===1?1:Math.max(2,Math.ceil(terms.length*.5)),needs_context:terms.length===0,reason:terms.length?'只比對完整關鍵詞；仍需人工確認對象與上下文。':'這句話缺少可明確檢索的對象或主題，暫不推薦證據。請補充在說誰、什麼設備或事件，以及具體條件。'};
+  return {terms,minimum:terms.length<=3?terms.length:Math.ceil(terms.length*.75),needs_context:terms.length===0,reason:terms.length?'短句須符合全部檢索詞，較長句須符合至少四分之三；仍需人工確認語意與上下文。':'這句話缺少可明確檢索的對象或主題，暫不推薦證據。請補充在說誰、什麼設備或事件，以及具體條件。'};
 }
 function relevance(query,source) {
   const p=retrievalProfile(query),body=`${source.title||''}\n${source.content||''}`.normalize('NFKC').toLowerCase();
@@ -337,7 +338,7 @@ const handler = {
       if(!['GET','POST','PATCH'].includes(request.method))fail('不支援的方法',405);
       const store=browserStore();
       if(path==='/api/status'&&request.method==='GET'){
-        const sources=await store.sources();return reply({version:'3.2.0-evidence',feed_updated_at:feedTime,sources:sources.length,automatic_sources:sources.filter(s=>s.automatic).length,cases:(await store.list()).length,ai:cloudAI,public_sources:{name:collector.name,last_collection:null},user:{signed_in:false,anonymous:true}});
+        const sources=await store.sources();return reply({version:'3.2.1-evidence',feed_updated_at:feedTime,sources:sources.length,automatic_sources:sources.filter(s=>s.automatic).length,cases:(await store.list()).length,ai:cloudAI,public_sources:{name:collector.name,last_collection:null},user:{signed_in:false,anonymous:true}});
       }
       if(path==='/api/sources'&&request.method==='GET')return reply(await store.sources());
       if(path==='/api/sync'&&request.method==='POST'){await readBody(request);return reply(await onlineCollect(store));}
@@ -354,7 +355,7 @@ const handler = {
         const subject=text(x.subject||'','查核對象',80,false),query=[subject,value].filter(Boolean).join('。');
         const collection=x.online!==false?await onlineCollect(store,query):null;
         const sources=(await store.sources()).filter(s=>x.include_demo===true||!s.demo);
-        const c={retrieval_version:2,id:crypto.randomUUID(),created:new Date().toISOString(),title:value.slice(0,70),input:value,subject,cutoff,collection,include_demo:x.include_demo===true,mode:'瀏覽器規則輔助（無 AI 模型）',warning:'語氣、網址及來源數只作查核提示；未執行 AI 語意真假判讀。',claims:splitClaims(value).map(cl=>({id:crypto.randomUUID(),...cl,retrieval:retrievalProfile([subject,cl.text].filter(Boolean).join('。')),verdict:'證據不足',reviewed:false,reason:'',reviewer:'',evidence:rank([subject,cl.text].filter(Boolean).join('。'),sources,cutoff).map(e=>({...e,reviewed:false}))}))};
+        const c={retrieval_version:3,id:crypto.randomUUID(),created:new Date().toISOString(),title:value.slice(0,70),input:value,subject,cutoff,collection,include_demo:x.include_demo===true,mode:'瀏覽器規則輔助（無 AI 模型）',warning:'語氣、網址及來源數只作查核提示；未執行 AI 語意真假判讀。',claims:splitClaims(value).map(cl=>({id:crypto.randomUUID(),...cl,retrieval:retrievalProfile([subject,cl.text].filter(Boolean).join('。')),verdict:'證據不足',reviewed:false,reason:'',reviewer:'',evidence:rank([subject,cl.text].filter(Boolean).join('。'),sources,cutoff).map(e=>({...e,reviewed:false}))}))};
         const used=new Set(c.claims.flatMap(cl=>cl.evidence.map(e=>e.id)));c.graph=graph(sources.filter(s=>used.has(s.id)));
         await store.save(c);return reply(c,201);
       }

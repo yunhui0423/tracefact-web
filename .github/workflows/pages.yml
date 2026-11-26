@@ -24,10 +24,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .cache/models
+            benchmark-cache
+          key: minilm-cfever-v2-2c4055b12046f11709e9df2c122e59ffbdc2f900
       - run: node scripts/build-retrieval.mjs
       - run: node scripts/update-feed.mjs
+      - run: node scripts/build-semantic.mjs
       - run: node --test
       - run: node scripts/evaluate.mjs
+      - run: node scripts/benchmark.mjs
+      - run: node scripts/sentence-benchmark.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

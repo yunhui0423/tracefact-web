@@ -5,6 +5,7 @@ function decodeChunks(chunks){return new TextDecoder().decode(Uint8Array.from(ch
 
 
 
+
 const verdicts = ['支持', '反駁', '證據衝突', '證據不足'];
 const relations = ['支持', '反駁', '無關', '待確認'];
 function fail(message, status = 400) { const e = new Error(message); e.status = status; throw e; }
@@ -134,18 +135,21 @@ function buildChecklist(c) {
   const links=inspectLinks(c.input), warnings=links.flatMap(x=>x.flags.map(f=>`${x.host}：${f}`));
   const evidence=[...new Map(claims.flatMap(cl=>cl.evidence.map(e=>[e.id,e]))).values()];
   const orgs=[...new Set(evidence.filter(e=>!e.demo).map(e=>e.provider_name||new URL(e.url).hostname))];
+  const groups=[...new Set(evidence.filter(e=>!e.demo).map(e=>e.organization_group||new URL(e.url).hostname))];
+  const official=evidence.filter(e=>e.source_kind==='official_statement').length;
+  const independenceConfirmed=false;
   const pending=claims.filter(cl=>!cl.reviewed || ['證據不足','證據衝突'].includes(cl.verdict)).length;
   const refuted=claims.some(cl=>cl.reviewed&&cl.verdict==='反駁');
   const numeric=/\d|百分之|[一二三四五六七八九十]+[年月日成倍]/.test(c.input);
   const authority=/研究|專家|醫師|教授|科學|數據/.test(c.input);
-  const pause=pending>0||orgs.length<3;
+  const pause=pending>0||!independenceConfirmed;
   return {
     method:'五項查核提示；不計算真假百分比，所有自動提示均非真偽認定。',
     items:[
       {key:'skepticism',title:'保持懷疑態度',status:cues.length?'發現需留意用語':'未見明顯語氣線索',details:[cues.length?`偵測到：${cues.join('、')}。`:'未偵測到預設的聳動／催促轉傳詞彙。','情緒或聳動語氣只是一項線索，不能據此判定訊息為假。']},
       {key:'source',title:'調查消息來源',status:warnings.length?'網址需要仔細核對':links.length?'已辨識網址，仍需核對作者':'原始發布來源待補',details:[links.length?`輸入網址主機：${links.map(x=>x.host).join('、')}。`:'輸入未附原始發布網址；平台找到的查核報告不等於訊息原始出處。',...warnings,'具名機構、作者身分與過往紀錄仍需查證；網域名稱本身不保證公信力。']},
       {key:'reasoning',title:'檢視內容合理性',status:pending?'數據與脈絡待核對':'已記錄人工判讀',details:[`已拆成 ${claims.length} 個主張，${pending} 個仍待確認或證據不足／衝突。`,numeric?'包含數字或時間資訊，請比對年份、母體、單位及適用範圍。':'請確認人物、時間、地點、對象與限制條件，避免只憑常理判斷。',authority?'提及研究／專家／數據，請追查具名者、研究原文與是否符合主張。':'若涉及科學或醫療說法，仍需原始研究或具資格的專業依據。']},
-      {key:'crosscheck',title:'多方交叉比對',status:orgs.length<3?'尚待跨機構比對':'尚待確認來源獨立性',details:[`目前候選有 ${evidence.length} 份報告，來自 ${orgs.length} 個機構／網站：${orgs.join('、')||'尚無真實來源'}。`,'可把 3～4 個可靠且獨立來源當作查核目標；相同機構的多篇報告、轉載及互相引用不能直接當成獨立證據。','來源數量不是判真門檻；仍須確認每個來源是否直接支持主張。'],organizations:orgs,independence_confirmed:false},
+      {key:'crosscheck',title:'多方交叉比對',status:'來源角色與獨立性待核對',details:[`目前候選有 ${evidence.length} 份報告，${orgs.length} 個發布名稱，保守歸為 ${groups.length} 個來源群。`,`${official} 份為官方說明；官方立場不等於獨立查核。政府部會及彙整頁不直接計為多個獨立證據。`,`發布名稱：${orgs.join('、')||'尚無來源'}。`,'仍需閱讀原文並核對引用關係、共同資料與立場。3～4個來源只是目標，數量不是真假門檻。'],organizations:orgs,independence_confirmed:false},
       {key:'sharing',title:'先查證，不亂傳',status:refuted?'避免原樣轉傳':pause?'先查證，暫緩轉傳':'分享時附查核依據',details:[refuted?'已有人工作成反駁結論，如需澄清請分享查核依據，避免原樣擴散。':pause?'仍有待確認主張或缺乏跨機構比對，建議暫緩轉傳。':'已有人工判讀紀錄，分享前仍應附來源、日期與未解決的限制。','平台不會自動轉發訊息，也不以單一分數保證可分享。']}
     ]
   };
@@ -234,21 +238,32 @@ const demo=[
 ;
 const liveCollector=publicSourceClient();
 let feedTime='';
-const collector={name:liveCollector.name,async collect(value=''){
-  if(value&&retrievalProfile(value).needs_context)return {provider:liveCollector.name,sources:[],queries:[],errors:[],found:0,needs_context:true,scope:retrievalProfile(value).reason};
-  const live=await liveCollector.collect(value);
-  if(live.sources.length&&!live.errors.length)return live;
-  try{
-    const response=await fetch(new URL('./feed.json',import.meta.url),{cache:'no-cache',signal:AbortSignal.timeout(12000)});
-    if(!response.ok)throw new Error('找不到公開摘要資料');
-    const feed=await response.json();feedTime=feed.updated_at;
-    if(!Array.isArray(feed.sources)||feed.sources.length>1000)throw new Error('摘要資料格式錯誤');
-    const terms=searchTerms(value), selected=value?feed.sources.filter(s=>relevance(value,s).accepted):feed.sources.slice(0,30);
-    return {...live,sources:selected,queries:terms,errors:[],scope:'原站即時連線不可用，改查網站最近 '+feed.sources.length+' 則公開摘要；資料更新 '+feed.updated_at+'。只含單一機構，非全網搜尋。',snapshot_at:feed.updated_at};
-  }catch(e){return {...live,errors:[...live.errors,'備援摘要：'+e.message]};}
+let semanticRetriever=null;
+export function setSemanticRetriever(fn){if(fn!==null&&typeof fn!=='function')throw Error('Invalid retriever');semanticRetriever=fn;}
+const collector={name:'公開查核與官方澄清',async collect(value='',all=false){
+ if(value&&retrievalProfile(value).needs_context)return {provider:this.name,sources:[],queries:[],errors:[],needs_context:true,scope:retrievalProfile(value).reason};
+ const errors=[],items=new Map();let providers=[];
+ try{const response=await fetch(new URL('./feed.json',import.meta.url),{cache:'no-cache',signal:AbortSignal.timeout(15000)});if(!response.ok)throw Error('來源索引未就緒');const feed=await response.json();
+  if(!Array.isArray(feed.sources)||feed.sources.length>1000)throw Error('來源索引格式錯誤');feedTime=feed.updated_at;providers=feed.providers||[];
+  for(const source of feed.sources)if(!value||all||relevance(value,source).accepted)items.set(source.url,source);
+ }catch(e){errors.push(e.message);}
+ if(value&&!all){const live=await liveCollector.collect(value);for(const source of live.sources)items.set(source.url,source);if(!items.size)errors.push(...live.errors);}
+ return {provider:this.name,sources:[...items.values()],providers,queries:value?searchTerms(value):[],errors,snapshot_at:feedTime,
+ scope:'台灣事實查核中心、衛生福利部與行政院彙整之官方澄清。官方說明代表發布機關立場，不等於獨立查核；不同部會與彙整頁不可直接當成獨立證據。資料更新 '+feedTime+'。非全網搜尋。'};
 }};
+async function findEvidence(query,sources,cutoff,semantic){
+ if(!semantic)return rank(query,sources,cutoff).map(e=>({...e,retrieval_method:'lexical'}));
+ if(retrievalProfile(query).needs_context)return [];
+ if(!semanticRetriever)fail('語意模型尚未就緒，請重試或切回關鍵詞模式',503);
+ let matches;try{matches=await semanticRetriever(query,sources,cutoff);}catch(e){fail('語意模式未完成：'+e.message+'。可重試或改用關鍵詞模式。',503);}
+ return matches.map(({source,similarity:score})=>{
+  const passage=sourcePassage(source),chunks=passage.match(/[^。！？!?\n]+[。！？!?]?/gu)||[''];
+  const quote=chunks.map(s=>s.trim()).sort((a,b)=>similarity(query,b)-similarity(query,a))[0].slice(0,800);
+  return {...source,quote,relation:'待確認',reviewed:false,note:'模型僅比對主題語意，尚未判讀支持或反駁。',matched_terms:relevance(query,source).matched,retrieval_method:'semantic',semantic_similarity:score};
+ });
+}
 
-const cloudAI={enabled:false,ready:false,model:'',message:'線上搜尋與查核提示；本機 AI 僅適用桌面版'};
+const cloudAI={enabled:false,ready:false,model:'Xenova/paraphrase-multilingual-MiniLM-L12-v2',message:'線上搜尋與查核提示；本機 AI 僅適用桌面版'};
 const cloudHeaders={
   'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Cache-Control':'no-store',
   'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://chatgpt.com https://*.chatgpt.com",
@@ -319,15 +334,15 @@ async function cloudSource(x,automatic=false){
   const content=text(x.content,'來源內容',40000),url=safeURL(text(x.url,'網址',2000),true);
   if(x.cites!==undefined&&(!Array.isArray(x.cites)||x.cites.length>20))fail('引用網址最多 20 個');
   return {id:crypto.randomUUID(),title:text(x.title,'來源標題',250),url,content,hash:await fingerprint(content),published:date(x.published),language:text(x.language||'zh-TW','語言',30),license:text(x.license||'待確認，僅供研究','使用依據',500),demo:x.demo===true,cites:(x.cites||[]).map(u=>safeURL(u,true)),retrieved:new Date().toISOString(),
-    ...(automatic?{automatic:true,provider:x.provider,provider_name:x.provider_name,content_kind:x.content_kind,upstream_id:x.upstream_id,upstream_modified:x.upstream_modified,excerpt_truncated:x.excerpt_truncated}:{} )};
+    ...(automatic?{automatic:true,provider:x.provider,provider_name:x.provider_name,source_kind:x.source_kind||'fact_check',organization_group:x.organization_group||(x.provider==='tfc'?'tfc':undefined),aggregation_provider:x.aggregation_provider,content_kind:x.content_kind,upstream_id:x.upstream_id,upstream_modified:x.upstream_modified,excerpt_truncated:x.excerpt_truncated}:{} )};
 }
-async function onlineCollect(store,value=''){
-  const r=await collector.collect(value),items=await Promise.all(r.sources.map(s=>cloudSource(s,true)));
+async function onlineCollect(store,value='',semantic=false){
+  const r=await collector.collect(value,semantic),items=await Promise.all(r.sources.map(s=>cloudSource(s,true)));
   const counts=await store.addSources(items,true),{sources,...info}=r;return {...info,...counts,found:sources.length};
 }
 function cloudReport(c){
   const literal=s=>String(s||'').replace(/[\\`*_{}\[\]<>#!|]/g,ch=>'\\'+ch);
-  return `# TraceFact AI 查核紀錄\n\n${literal(c.title)}\n\n建立時間：${c.created}\n查核對象：${literal(c.subject||'未指定')}\n\n線上版：自動公開來源搜尋與規則提示；AI 語意模型尚未啟用。\n\n`+
+  return `# TraceFact AI 查核紀錄\n\n${literal(c.title)}\n\n建立時間：${c.created}\n查核對象：${literal(c.subject||'未指定')}\n\n檢索模式：${literal(c.mode)}。語意相似不等於支持或反駁。\n\n`+
     `## 五項查核提示\n\n`+c.checklist.items.map(i=>`### ${i.title}：${i.status}\n\n${i.details.map(d=>'- '+literal(d)).join('\n')}\n`).join('\n')+
     c.claims.map(cl=>`\n## ${literal(cl.text)}\n\n結論：${cl.verdict}（${cl.reviewed?'人工覆核':'待覆核'}）\n\n理由：${literal(cl.reason)}\n\n`+cl.evidence.map(e=>`- ${literal(e.title)}${e.demo?'【虛構示例】':''}\n  - 原文網址：${e.url}\n  - 發布：${e.published||'未知'}；取得：${e.retrieved}\n  - 關係：${e.relation}（${e.reviewed?'人工確認':'候選證據'}）\n  - 引文：${literal(e.quote)}\n  - 使用依據：${literal(e.license)}\n`).join('\n')).join('\n');
 }
@@ -352,10 +367,14 @@ const handler = {
         const x=await readBody(request),value=text(x.text,'訊息',10000),cutoff=date(x.cutoff);
         if(x.ai===true)fail('線上版尚未啟用 AI 語意模型；請使用線上搜尋與規則提示',503);
         if(x.online!==undefined&&typeof x.online!=='boolean')fail('online 格式無效');
+        if(x.semantic!==undefined&&typeof x.semantic!=='boolean')fail('semantic 格式無效');
         const subject=text(x.subject||'','查核對象',80,false),query=[subject,value].filter(Boolean).join('。');
-        const collection=x.online!==false?await onlineCollect(store,query):null;
+        const collection=x.online!==false?await onlineCollect(store,query,x.semantic===true):null;
         const sources=(await store.sources()).filter(s=>x.include_demo===true||!s.demo);
-        const c={retrieval_version:3,id:crypto.randomUUID(),created:new Date().toISOString(),title:value.slice(0,70),input:value,subject,cutoff,collection,include_demo:x.include_demo===true,mode:'瀏覽器規則輔助（無 AI 模型）',warning:'語氣、網址及來源數只作查核提示；未執行 AI 語意真假判讀。',claims:splitClaims(value).map(cl=>({id:crypto.randomUUID(),...cl,retrieval:retrievalProfile([subject,cl.text].filter(Boolean).join('。')),verdict:'證據不足',reviewed:false,reason:'',reviewer:'',evidence:rank([subject,cl.text].filter(Boolean).join('。'),sources,cutoff).map(e=>({...e,reviewed:false}))}))};
+        const c={retrieval_version:4,semantic:x.semantic===true,semantic_model:x.semantic===true?'Xenova/paraphrase-multilingual-MiniLM-L12-v2@2c4055b12046f11709e9df2c122e59ffbdc2f900':null,id:crypto.randomUUID(),created:new Date().toISOString(),title:value.slice(0,70),input:value,subject,cutoff,collection,include_demo:x.include_demo===true,mode:x.semantic===true?'裝置端 AI 語意檢索（不是真假判讀）':'關鍵詞檢索與人工覆核',warning:'候選資料不等於支持或反駁；官方說明與獨立查核角色不同。真偽結論必須經人工覆核。',claims:splitClaims(value).map(cl=>({id:crypto.randomUUID(),...cl,retrieval:retrievalProfile([subject,cl.text].filter(Boolean).join('。')),verdict:'證據不足',reviewed:false,reason:'',reviewer:'',evidence:[]}))};
+        for(const claim of c.claims)claim.evidence=await findEvidence([subject,claim.text].filter(Boolean).join('。'),sources,cutoff,c.semantic);
+        c.semantic_executed=c.semantic&&c.claims.some(cl=>!cl.retrieval.needs_context);
+        if(c.semantic&&!c.semantic_executed)c.mode='資訊不足，尚未執行 AI 語意比對';
         const used=new Set(c.claims.flatMap(cl=>cl.evidence.map(e=>e.id)));c.graph=graph(sources.filter(s=>used.has(s.id)));
         await store.save(c);return reply(c,201);
       }
@@ -380,7 +399,7 @@ const handler = {
             e.manual_excerpt=true;e.content_kind='人工補充的原文段落（平台未自動核實）';e.quote='';e.reviewed=false;e.relation='待確認';reset=true;
           }
           else if(x.evidence_id){const e=cl.evidence.find(e=>e.id===x.evidence_id);if(!e)fail('找不到證據',404);if(!relations.includes(x.relation))fail('證據關係無效');const quote=text(x.quote,'引文',800);if(quote.length<4||!sourcePassage(e).includes(quote))fail('引文必須至少四字且存在於已收錄內文，不能只引用報告標題');Object.assign(e,{relation:x.relation,quote,note:text(x.note||'人工確認','註記',1000),reviewed:true});reset=true;}
-          else if(x.text!==undefined){cl.text=text(x.text,'主張',2000);cl.retrieval=retrievalProfile([c.subject,cl.text].filter(Boolean).join('。'));cl.evidence=rank([c.subject,cl.text].filter(Boolean).join('。'),(await store.sources()).filter(s=>c.include_demo||!s.demo),c.cutoff).map(e=>({...e,reviewed:false}));reset=true;}
+          else if(x.text!==undefined){cl.text=text(x.text,'主張',2000);cl.retrieval=retrievalProfile([c.subject,cl.text].filter(Boolean).join('。'));cl.evidence=await findEvidence([c.subject,cl.text].filter(Boolean).join('。'),(await store.sources()).filter(s=>c.include_demo||!s.demo),c.cutoff,c.semantic);reset=true;}
           else{
             if(!verdicts.includes(x.verdict))fail('結論無效');const support=cl.evidence.some(e=>e.reviewed&&validEvidenceQuote(e)&&e.relation==='支持'),refute=cl.evidence.some(e=>e.reviewed&&validEvidenceQuote(e)&&e.relation==='反駁');
             if((x.verdict==='支持'&&(!support||refute))||(x.verdict==='反駁'&&(!refute||support))||(x.verdict==='證據衝突'&&(!support||!refute)))fail('結論與已確認證據不一致');

@@ -6,6 +6,8 @@ let bundle=read('site/backend.mjs');
 const start=bundle.indexOf('const verdicts ='),end=bundle.indexOf('const domainToUnicode');
 if(start<0||end<0)throw Error('Engine bundle markers missing');
 bundle=bundle.slice(0,start)+engine+'\n'+bundle.slice(end);
+const checklistStart=bundle.indexOf('const domainToUnicode'),checklistEnd=bundle.indexOf('const ORIGIN =');
+bundle=bundle.slice(0,checklistStart)+'const domainToUnicode=value=>value;\n'+strip(read('lib/checklist.mjs'))+'\n'+bundle.slice(checklistEnd);
 const providerStart=bundle.indexOf("const ORIGIN ="),providerEnd=bundle.indexOf('const liveCollector=');
 let provider=strip(read('lib/public-sources.mjs')).replace("Buffer.concat(chunks).toString('utf8')","await new Blob(chunks).text()").replace(",\x27User-Agent\x27:\x27TraceFact-AI/1.1 (+https://github.com/yunhui0423/tracefact-ai)\x27",'');
 if(providerStart<0||providerEnd<0)throw Error('Provider bundle markers missing');

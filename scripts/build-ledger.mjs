@@ -1,0 +1,10 @@
+import {mkdirSync,copyFileSync,readdirSync,readFileSync,writeFileSync} from 'node:fs';
+const root=new URL('../',import.meta.url),dist=new URL('dist/',root);mkdirSync(dist,{recursive:true});
+for(const name of readdirSync(new URL('ledger/',root)))if(/\.(html|css|mjs)$/.test(name))copyFileSync(new URL('ledger/'+name,root),new URL(name,dist));
+const vendor=new URL('vendor/',dist),core=new URL('tesseract-core/',vendor);mkdirSync(core,{recursive:true});
+for(const name of ['tesseract.min.js','worker.min.js'])copyFileSync(new URL('node_modules/tesseract.js/dist/'+name,root),new URL(name,vendor));
+for(const name of readdirSync(new URL('node_modules/tesseract.js-core/',root)))if(/^tesseract-core.*\.(js|wasm)$/.test(name))copyFileSync(new URL('node_modules/tesseract.js-core/'+name,root),new URL(name,core));
+copyFileSync(new URL('node_modules/@huggingface/transformers/dist/transformers.min.js',root),new URL('transformers.js',vendor));
+for(const name of readdirSync(new URL('node_modules/onnxruntime-web/dist/',root)))if(/\.wasm$|^ort-wasm.*\.mjs$/.test(name))copyFileSync(new URL('node_modules/onnxruntime-web/dist/'+name,root),new URL(name,vendor));
+writeFileSync(new URL('THIRD-PARTY-LICENSES.txt',dist),['@huggingface/transformers/LICENSE','tesseract.js/LICENSE.md','tesseract.js-core/LICENSE'].map(path=>readFileSync(new URL('node_modules/'+path,root),'utf8')).join('\n\n')+'\n\n'+readFileSync(new URL('licenses/ONNXRuntime-MIT.txt',root),'utf8'));
+console.log('Pocket Ledger built: local data, receipt OCR and device-side Whisper.');

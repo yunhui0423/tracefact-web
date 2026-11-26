@@ -1,10 +1,8 @@
-name: Publish TraceFact
+name: Publish Pocket Ledger
 on:
   push:
     branches: [main]
   workflow_dispatch:
-  schedule:
-    - cron: '17 */6 * * *'
 permissions:
   contents: read
   actions: read
@@ -26,23 +24,12 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - uses: actions/cache@v4
-        with:
-          path: |
-            .cache/models
-            benchmark-cache
-          key: minilm-cfever-v2-2c4055b12046f11709e9df2c122e59ffbdc2f900
-      - run: node scripts/build-retrieval.mjs
-      - run: node scripts/update-feed.mjs
-      - run: node scripts/build-semantic.mjs
-      - run: node --test
-      - run: node scripts/evaluate.mjs
-      - run: node scripts/benchmark.mjs
-      - run: node scripts/sentence-benchmark.mjs
+      - run: node --test ledger-tests/*.test.mjs
+      - run: node scripts/build-ledger.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: dist
           name: github-pages-${{ github.run_attempt }}
       - name: Wait for artifact metadata
         run: node scripts/wait-artifact.mjs

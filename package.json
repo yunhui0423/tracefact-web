@@ -1,17 +1,16 @@
 {
   "name": "tracefact-web",
-  "version": "4.0.0",
+  "version": "5.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test",
-    "sync:sources": "node scripts/update-feed.mjs",
-    "build:semantic": "node scripts/build-semantic.mjs",
-    "evaluate:pages": "node scripts/benchmark.mjs",
-    "evaluate:sentences": "node scripts/sentence-benchmark.mjs"
+    "test": "node --test ledger-tests/*.test.mjs",
+    "build": "node scripts/build-ledger.mjs",
+    "preview": "node scripts/preview-ledger.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.2",
-    "fast-xml-parser": "5.12.1"
+    "fast-xml-parser": "5.12.1",
+    "tesseract.js": "6.0.1"
   }
 }

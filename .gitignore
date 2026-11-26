@@ -5,3 +5,7 @@ site/feed.json
 site/semantic-index.json
 benchmark-cache/
 *.log
+
+dist/
+ledger-pages.yml
+ledger-readme.md

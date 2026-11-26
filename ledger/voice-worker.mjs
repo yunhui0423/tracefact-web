@@ -1,0 +1,4 @@
+import {pipeline,env} from './vendor/transformers.js';
+env.allowLocalModels=false;env.backends.onnx.wasm.numThreads=1;env.backends.onnx.wasm.wasmPaths=new URL('./vendor/',import.meta.url).href;
+let model;
+self.onmessage=async({data})=>{try{if(!(data.audio instanceof Float32Array)||data.audio.length<1600||data.audio.length>16000*35)throw Error('音訊需介於 0.1 至 35 秒');if(!model)model=await pipeline('automatic-speech-recognition','Xenova/whisper-tiny',{revision:'5332fcc35e32a33b86612b9a57a89be7906102b1',dtype:'q8',device:'wasm',progress_callback:e=>{if(e.status==='progress_total')self.postMessage({type:'progress',percent:Math.round(e.progress)});}});const result=await model(data.audio,{language:data.language||'chinese',task:'transcribe',return_timestamps:false,max_new_tokens:128});self.postMessage({type:'result',text:result.text});}catch(e){self.postMessage({type:'error',message:e.message});}};

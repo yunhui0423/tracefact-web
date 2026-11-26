@@ -11,7 +11,8 @@ for(let start=0;start<feed.sources.length;start+=8){
 }
 writeFileSync(new URL('site/semantic-index.json',root),JSON.stringify({...SEMANTIC_CONFIG,updated_at:feed.updated_at,items}));
 const vendor=new URL('site/vendor/',root);mkdirSync(vendor,{recursive:true});
-copyFileSync(new URL('node_modules/@huggingface/transformers/dist/transformers.web.min.js',root),new URL('transformers.web.js',vendor));
+// The web.* build leaves bare npm imports; static module workers need the bundled CDN build.
+copyFileSync(new URL('node_modules/@huggingface/transformers/dist/transformers.min.js',root),new URL('transformers.web.js',vendor));
 for(const name of readdirSync(new URL('node_modules/onnxruntime-web/dist/',root)))if(/\.wasm$|^ort-wasm.*\.mjs$/.test(name))copyFileSync(new URL('node_modules/onnxruntime-web/dist/'+name,root),new URL(name,vendor));
 for(const name of ['semantic-config.mjs','semantic-search.mjs'])copyFileSync(new URL('lib/'+name,root),new URL('site/'+name,root));
 const runtimePackage=JSON.parse(readFileSync(new URL('node_modules/onnxruntime-web/package.json',root),'utf8'));if(runtimePackage.license!=='MIT')throw Error('Runtime license changed; review required');

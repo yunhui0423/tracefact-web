@@ -3,6 +3,7 @@ function decodeChunks(chunks){return new TextDecoder().decode(Uint8Array.from(ch
 
 
 
+
 const verdicts = ['支持', '反駁', '證據衝突', '證據不足'];
 const relations = ['支持', '反駁', '無關', '待確認'];
 function fail(message, status = 400) { const e = new Error(message); e.status = status; throw e; }
@@ -55,6 +56,14 @@ function relevance(query,source) {
   const matched=p.terms.filter(term=>body.includes(term));
   return {accepted:!p.needs_context&&matched.length>=p.minimum,matched,required:p.minimum,terms:p.terms};
 }
+function sourcePassage(source){
+  let body=String(source.content||'').trim();
+  const title=String(source.title||'').trim();
+  if(source.automatic&&title&&body.startsWith(title))body=body.slice(title.length).trim();
+  if(source.automatic&&body.normalize('NFKC').replace(/\s+/g,'')===title.normalize('NFKC').replace(/\s+/g,''))return '';
+  return body;
+}
+function validEvidenceQuote(e){return typeof e.quote==='string'&&e.quote.trim().length>=4&&sourcePassage(e).includes(e.quote);}
 function rank(query, sources, cutoff = '', limit = 6) {
   const eligible = sources.filter(s => (!cutoff || (s.published && s.published <= cutoff))&&relevance(query,s).accepted);
   const docs = eligible.map(s => tokens(`${s.title} ${s.content}`));
@@ -67,9 +76,10 @@ function rank(query, sources, cutoff = '', limit = 6) {
       const idf = Math.log(1 + (docs.length - df + 0.5) / (df + 0.5));
       score += idf * tf * 2.2 / (tf + 1.2 * (0.25 + 0.75 * docs[i].length / (avg || 1)));
     }
-    const chunks = s.content.match(/[^。！？!?\n]+[。！？!?]?/gu) || [s.content];
+    const passage=sourcePassage(s);
+    const chunks = passage.match(/[^。！？!?\n]+[。！？!?]?/gu) || [''];
     const quote = chunks.map(t => t.trim()).sort((a, b) => similarity(query, b) - similarity(query, a))[0].slice(0, 800);
-    return { ...s, matched_terms:relevance(query,s).matched, score: Number(score.toFixed(4)), quote, relation: '待確認', note: '通過完整關鍵詞篩選；尚未確認語意、對象或支持／反駁關係，請閱讀原文覆核。' };
+    return { ...s, excerpt_available:!!passage, matched_terms:relevance(query,s).matched, score: Number(score.toFixed(4)), quote, relation: '待確認', note: '通過完整關鍵詞篩選；尚未確認語意、對象或支持／反駁關係，請閱讀原文覆核。' };
   }).filter(s => s.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
 }
 function graph(sources) {
@@ -316,7 +326,7 @@ async function onlineCollect(store,value=''){
 }
 function cloudReport(c){
   const literal=s=>String(s||'').replace(/[\\`*_{}\[\]<>#!|]/g,ch=>'\\'+ch);
-  return `# TraceFact AI 查核紀錄\n\n${literal(c.title)}\n\n建立時間：${c.created}\n\n線上版：自動公開來源搜尋與規則提示；AI 語意模型尚未啟用。\n\n`+
+  return `# TraceFact AI 查核紀錄\n\n${literal(c.title)}\n\n建立時間：${c.created}\n查核對象：${literal(c.subject||'未指定')}\n\n線上版：自動公開來源搜尋與規則提示；AI 語意模型尚未啟用。\n\n`+
     `## 五項查核提示\n\n`+c.checklist.items.map(i=>`### ${i.title}：${i.status}\n\n${i.details.map(d=>'- '+literal(d)).join('\n')}\n`).join('\n')+
     c.claims.map(cl=>`\n## ${literal(cl.text)}\n\n結論：${cl.verdict}（${cl.reviewed?'人工覆核':'待覆核'}）\n\n理由：${literal(cl.reason)}\n\n`+cl.evidence.map(e=>`- ${literal(e.title)}${e.demo?'【虛構示例】':''}\n  - 原文網址：${e.url}\n  - 發布：${e.published||'未知'}；取得：${e.retrieved}\n  - 關係：${e.relation}（${e.reviewed?'人工確認':'候選證據'}）\n  - 引文：${literal(e.quote)}\n  - 使用依據：${literal(e.license)}\n`).join('\n')).join('\n');
 }
@@ -327,7 +337,7 @@ const handler = {
       if(!['GET','POST','PATCH'].includes(request.method))fail('不支援的方法',405);
       const store=browserStore();
       if(path==='/api/status'&&request.method==='GET'){
-        const sources=await store.sources();return reply({version:'3.1.0-relevance',feed_updated_at:feedTime,sources:sources.length,automatic_sources:sources.filter(s=>s.automatic).length,cases:(await store.list()).length,ai:cloudAI,public_sources:{name:collector.name,last_collection:null},user:{signed_in:false,anonymous:true}});
+        const sources=await store.sources();return reply({version:'3.2.0-evidence',feed_updated_at:feedTime,sources:sources.length,automatic_sources:sources.filter(s=>s.automatic).length,cases:(await store.list()).length,ai:cloudAI,public_sources:{name:collector.name,last_collection:null},user:{signed_in:false,anonymous:true}});
       }
       if(path==='/api/sources'&&request.method==='GET')return reply(await store.sources());
       if(path==='/api/sync'&&request.method==='POST'){await readBody(request);return reply(await onlineCollect(store));}
@@ -341,9 +351,10 @@ const handler = {
         const x=await readBody(request),value=text(x.text,'訊息',10000),cutoff=date(x.cutoff);
         if(x.ai===true)fail('線上版尚未啟用 AI 語意模型；請使用線上搜尋與規則提示',503);
         if(x.online!==undefined&&typeof x.online!=='boolean')fail('online 格式無效');
-        const collection=x.online!==false?await onlineCollect(store,value):null;
+        const subject=text(x.subject||'','查核對象',80,false),query=[subject,value].filter(Boolean).join('。');
+        const collection=x.online!==false?await onlineCollect(store,query):null;
         const sources=(await store.sources()).filter(s=>x.include_demo===true||!s.demo);
-        const c={retrieval_version:2,id:crypto.randomUUID(),created:new Date().toISOString(),title:value.slice(0,70),input:value,cutoff,collection,include_demo:x.include_demo===true,mode:'瀏覽器規則輔助（無 AI 模型）',warning:'語氣、網址及來源數只作查核提示；未執行 AI 語意真假判讀。',claims:splitClaims(value).map(cl=>({id:crypto.randomUUID(),...cl,retrieval:retrievalProfile(cl.text),verdict:'證據不足',reviewed:false,reason:'',reviewer:'',evidence:rank(cl.text,sources,cutoff).map(e=>({...e,reviewed:false}))}))};
+        const c={retrieval_version:2,id:crypto.randomUUID(),created:new Date().toISOString(),title:value.slice(0,70),input:value,subject,cutoff,collection,include_demo:x.include_demo===true,mode:'瀏覽器規則輔助（無 AI 模型）',warning:'語氣、網址及來源數只作查核提示；未執行 AI 語意真假判讀。',claims:splitClaims(value).map(cl=>({id:crypto.randomUUID(),...cl,retrieval:retrievalProfile([subject,cl.text].filter(Boolean).join('。')),verdict:'證據不足',reviewed:false,reason:'',reviewer:'',evidence:rank([subject,cl.text].filter(Boolean).join('。'),sources,cutoff).map(e=>({...e,reviewed:false}))}))};
         const used=new Set(c.claims.flatMap(cl=>cl.evidence.map(e=>e.id)));c.graph=graph(sources.filter(s=>used.has(s.id)));
         await store.save(c);return reply(c,201);
       }
@@ -359,11 +370,18 @@ const handler = {
         if(request.method==='PATCH'&&!match[2]){
           const x=await readBody(request),cl=c.claims.find(cl=>cl.id===x.claim_id);if(!cl)fail('找不到主張',404);
           let reset=false;
-          if(x.source_id){const s=(await store.sources()).find(s=>s.id===x.source_id);if(!s)fail('找不到來源',404);if(s.demo&&!c.include_demo)fail('一般查核不使用虛構來源');if(c.cutoff&&(!s.published||s.published>c.cutoff))fail('來源超過證據截止日期');if(cl.evidence.some(e=>e.id===s.id)||cl.evidence.length>=12)fail('來源已存在或超過上限');cl.evidence.push({...s,score:0,quote:s.content.slice(0,800),relation:'待確認',reviewed:false,note:'手動選取候選證據'});reset=true;}
-          else if(x.evidence_id){const e=cl.evidence.find(e=>e.id===x.evidence_id);if(!e)fail('找不到證據',404);if(!relations.includes(x.relation))fail('證據關係無效');const quote=text(x.quote,'引文',800);if(quote.length<4||!e.content.includes(quote))fail('引文必須至少四字且存在於來源');Object.assign(e,{relation:x.relation,quote,note:text(x.note||'人工確認','註記',1000),reviewed:true});reset=true;}
-          else if(x.text!==undefined){cl.text=text(x.text,'主張',2000);cl.retrieval=retrievalProfile(cl.text);cl.evidence=rank(cl.text,(await store.sources()).filter(s=>c.include_demo||!s.demo),c.cutoff).map(e=>({...e,reviewed:false}));reset=true;}
+          if(x.source_id){const s=(await store.sources()).find(s=>s.id===x.source_id);if(!s)fail('找不到來源',404);if(s.demo&&!c.include_demo)fail('一般查核不使用虛構來源');if(c.cutoff&&(!s.published||s.published>c.cutoff))fail('來源超過證據截止日期');if(cl.evidence.some(e=>e.id===s.id)||cl.evidence.length>=12)fail('來源已存在或超過上限');cl.evidence.push({...s,score:0,quote:sourcePassage(s).slice(0,800),relation:'待確認',reviewed:false,note:'手動選取候選證據'});reset=true;}
+          else if(x.passage!==undefined){
+            const e=cl.evidence.find(e=>e.id===x.evidence_id);if(!e)fail('找不到證據',404);
+            if(x.confirmed!==true)fail('請先確認已開啟原文，並由原文貼上段落');
+            const passage=text(x.passage,'原文必要段落',8000);if(passage.length<20)fail('必要段落至少 20 字，請包含足夠上下文');
+            e.original_content=e.original_content||e.content;e.content=e.title+'\n\n'+passage;e.hash=await fingerprint(e.content);
+            e.manual_excerpt=true;e.content_kind='人工補充的原文段落（平台未自動核實）';e.quote='';e.reviewed=false;e.relation='待確認';reset=true;
+          }
+          else if(x.evidence_id){const e=cl.evidence.find(e=>e.id===x.evidence_id);if(!e)fail('找不到證據',404);if(!relations.includes(x.relation))fail('證據關係無效');const quote=text(x.quote,'引文',800);if(quote.length<4||!sourcePassage(e).includes(quote))fail('引文必須至少四字且存在於已收錄內文，不能只引用報告標題');Object.assign(e,{relation:x.relation,quote,note:text(x.note||'人工確認','註記',1000),reviewed:true});reset=true;}
+          else if(x.text!==undefined){cl.text=text(x.text,'主張',2000);cl.retrieval=retrievalProfile([c.subject,cl.text].filter(Boolean).join('。'));cl.evidence=rank([c.subject,cl.text].filter(Boolean).join('。'),(await store.sources()).filter(s=>c.include_demo||!s.demo),c.cutoff).map(e=>({...e,reviewed:false}));reset=true;}
           else{
-            if(!verdicts.includes(x.verdict))fail('結論無效');const support=cl.evidence.some(e=>e.reviewed&&e.relation==='支持'),refute=cl.evidence.some(e=>e.reviewed&&e.relation==='反駁');
+            if(!verdicts.includes(x.verdict))fail('結論無效');const support=cl.evidence.some(e=>e.reviewed&&validEvidenceQuote(e)&&e.relation==='支持'),refute=cl.evidence.some(e=>e.reviewed&&validEvidenceQuote(e)&&e.relation==='反駁');
             if((x.verdict==='支持'&&(!support||refute))||(x.verdict==='反駁'&&(!refute||support))||(x.verdict==='證據衝突'&&(!support||!refute)))fail('結論與已確認證據不一致');
             Object.assign(cl,{verdict:x.verdict,reviewed:true,reason:text(x.reason,'理由',3000),reviewer:text(x.reviewer,'覆核人',100),reviewed_at:new Date().toISOString()});
           }
@@ -377,4 +395,4 @@ const handler = {
 };
 
 export async function localResponse(path,method='GET',data){return handler.fetch(new Request('https://tracefact.invalid'+path,{method,headers:data===undefined?{}:{'Content-Type':'application/json'},body:data===undefined?undefined:JSON.stringify(data)}),{});}
-export {rank,retrievalProfile};
+export {rank,retrievalProfile,sourcePassage,validEvidenceQuote};

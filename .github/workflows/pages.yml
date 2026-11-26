@@ -27,6 +27,7 @@ jobs:
       - run: node scripts/build-retrieval.mjs
       - run: node scripts/update-feed.mjs
       - run: node --test
+      - run: node scripts/evaluate.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

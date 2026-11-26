@@ -1,0 +1,95 @@
+{
+  "snapshot_at": "2026-11-25T11:44:21.018Z",
+  "description": "三篇真實公開報告的標題與原站摘要，搭配人工設定的六項相關性預期。此為小型檢索評估，不測真假判定，不代表整體準確率。",
+  "sources": [
+    {
+      "title": "網傳「確保選務人員沒有在選票上寫字」是美國期中選舉謠言，與台灣九合一選舉無關",
+      "url": "https://tfc-taiwan.org.tw/fact-check-reports/us-midterm-election-ballot-marking-rumor/",
+      "published": "2026-11-25",
+      "content": "網傳「確保選務人員沒有在選票上寫字」是美國期中選舉謠言，與台灣九合一選舉無關\n\n近期網路流傳訊息，聲稱投票時要注意選票有無被工作人員劃記，否則可能變廢票。經查證，傳言挪用自美國期中選舉期間流傳的不實訊息，與台灣即將進行的九合一選舉無關。針對「選務人員作票」相關傳言，中選會強調，選務人員主要由公教人員、警察、跨政黨監察員組成，過程公開透明可受監督。",
+      "language": "zh-TW",
+      "cites": [],
+      "demo": false,
+      "license": "台灣事實查核中心報告標題與原站摘要；本專題採非營利研究用途並註明出處，營利用途須另取得授權。https://tfc-taiwan.org.tw/copyright-notice/",
+      "provider": "tfc",
+      "provider_name": "台灣事實查核中心",
+      "automatic": true,
+      "content_kind": "報告標題與原站摘要（非全文）",
+      "upstream_id": 156863,
+      "upstream_modified": "2026-11-25T16:25:57",
+      "attribution_url": "https://tfc-taiwan.org.tw/fact-check-reports/us-midterm-election-ballot-marking-rumor/",
+      "excerpt_truncated": false,
+      "id": "real-0"
+    },
+    {
+      "title": "網傳簡訊「Apple帳號已被登入iCloud並購買禮品卡」疑為詐騙訊息",
+      "url": "https://tfc-taiwan.org.tw/fact-check-reports/apple-icloud-login-gift-card-scam-text-message/",
+      "published": "2026-11-24",
+      "content": "網傳簡訊「Apple帳號已被登入iCloud並購買禮品卡」疑為詐騙訊息\n\n近日有民眾收到聲稱是Apple官方客服所發出的簡訊，提醒用戶疑個資外洩並遭盜刷，請用戶立即加入官方LINE與客服聯繫。經查證，Apple官方並無LINE帳號。網傳簡訊疑為詐騙訊息，請民眾當心。",
+      "language": "zh-TW",
+      "cites": [],
+      "demo": false,
+      "license": "台灣事實查核中心報告標題與原站摘要；本專題採非營利研究用途並註明出處，營利用途須另取得授權。https://tfc-taiwan.org.tw/copyright-notice/",
+      "provider": "tfc",
+      "provider_name": "台灣事實查核中心",
+      "automatic": true,
+      "content_kind": "報告標題與原站摘要（非全文）",
+      "upstream_id": 156851,
+      "upstream_modified": "2026-11-24T17:26:03",
+      "attribution_url": "https://tfc-taiwan.org.tw/fact-check-reports/apple-icloud-login-gift-card-scam-text-message/",
+      "excerpt_truncated": false,
+      "id": "real-1"
+    },
+    {
+      "title": "網傳「輝達總部確定不來 松南基地開發變了」為混淆事件脈絡的錯誤資訊",
+      "url": "https://tfc-taiwan.org.tw/fact-check-reports/nvidia-taipei-headquarters-songnan-site-rumor-fact-check/",
+      "published": "2026-11-24",
+      "content": "網傳「輝達總部確定不來 松南基地開發變了」為混淆事件脈絡的錯誤資訊\n\n網路近期流傳「輝達總部確定不來 松南基地開發變了」的圖卡，貼文附上的文章引用台北市議員許淑華質詢北市產發局的內容，指稱「松南基地」將轉作AI產業聚落。經查證，網傳連結文章出自內容農場，且引用今年4月22日舊新聞，當時已確認輝達總部落址北士科，松南營區變更用途並非受輝達近況影響。",
+      "language": "zh-TW",
+      "cites": [],
+      "demo": false,
+      "license": "台灣事實查核中心報告標題與原站摘要；本專題採非營利研究用途並註明出處，營利用途須另取得授權。https://tfc-taiwan.org.tw/copyright-notice/",
+      "provider": "tfc",
+      "provider_name": "台灣事實查核中心",
+      "automatic": true,
+      "content_kind": "報告標題與原站摘要（非全文）",
+      "upstream_id": 156844,
+      "upstream_modified": "2026-11-24T15:39:13",
+      "attribution_url": "https://tfc-taiwan.org.tw/fact-check-reports/nvidia-taipei-headquarters-songnan-site-rumor-fact-check/",
+      "excerpt_truncated": false,
+      "id": "real-2"
+    }
+  ],
+  "cases": [
+    {
+      "query": "選務人員在選票上寫字會變廢票",
+      "expected": [
+        "real-0"
+      ]
+    },
+    {
+      "query": "Apple官方客服要求加入LINE聯繫",
+      "expected": [
+        "real-1"
+      ]
+    },
+    {
+      "query": "輝達總部落址松南基地",
+      "expected": [
+        "real-2"
+      ]
+    },
+    {
+      "query": "沒電就不能活",
+      "expected": []
+    },
+    {
+      "query": "明天颱風停班停課",
+      "expected": []
+    },
+    {
+      "query": "雞蛋顏色與營養價值",
+      "expected": []
+    }
+  ]
+}

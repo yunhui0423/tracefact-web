@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {rank,retrievalProfile} from './lib/engine.mjs';
+import {rank,retrievalProfile,sourcePassage,validEvidenceQuote} from './lib/engine.mjs';
 import {searchTerms,publicSourceClient} from './lib/public-sources.mjs';
 import {rank as browserRank} from './site/backend.mjs';
 const wrong=[
@@ -35,4 +35,20 @@ test('相反說法仍保留為候選，相關性不取代真假判定',()=>{
 test('同一原站回應中的無關報告仍須經過完整詞篩選',async()=>{
  const client=publicSourceClient({fetcher:async()=>new Response(JSON.stringify(wrong.map((s,i)=>({id:i+1,title:{rendered:s.title},excerpt:{rendered:s.content},date:'2026-11-01T10:00:00',link:'https://tfc-taiwan.org.tw/fact-check-reports/test-'+i}))),{headers:{'content-type':'application/json'}})});
  assert.deepEqual((await client.collect('雞蛋顏色與營養價值')).sources,[]);
+});
+test('自動報告只引用摘要內文，不重複把標題當證據',()=>{
+ const source={id:'a',automatic:true,title:'雞蛋顏色不能代表營養價值',content:'雞蛋顏色不能代表營養價值\n\n蛋殼顏色取決於品種，營養價值並不取決於殼色。'};
+ const [found]=rank('雞蛋顏色與營養價值',[source]);
+ assert.equal(found.quote,'蛋殼顏色取決於品種，營養價值並不取決於殼色。');
+ assert.equal(validEvidenceQuote({...source,quote:source.title}),false);
+ assert.equal(validEvidenceQuote({...source,quote:found.quote}),true);
+});
+test('只有標題的報告可作線索，不能產生內文引文',()=>{
+ const source={id:'a',automatic:true,title:'雞蛋顏色與營養價值',content:'雞蛋顏色與營養價值'};
+ const [found]=rank('雞蛋顏色',[source]);assert.equal(found.quote,'');assert.equal(found.excerpt_available,false);
+ assert.equal(sourcePassage(source),'');
+});
+test('非自動匯入的段落仍可作逐字引文',()=>{
+ const source={title:'圖書館',content:'圖書館平日九點關門。'};
+ assert.equal(sourcePassage(source),source.content);assert.equal(validEvidenceQuote({...source,quote:source.content}),true);
 });

@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="zh-Hant">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#141926"><meta name="description" content="貼上訊息、找到公開證據，在分享之前多一分把握。"><title>TraceFact｜讓證據說話</title><link rel="stylesheet" href="./style.css?v=4"><script type="module" src="./app.js?v=5"></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#141926"><meta name="description" content="貼上訊息、找到公開證據，在分享之前多一分把握。"><title>TraceFact｜讓證據說話</title><link rel="stylesheet" href="./style.css?v=6"><script type="module" src="./app.js?v=6"></script></head>
 <body>
 <a class="skip" href="#message">跳至查核輸入</a>
 <aside class="sidebar">
@@ -25,7 +25,7 @@
      <form id="analyze-form">
       <label class="sr-only" for="message">待查訊息</label><textarea id="message" required maxlength="10000" rows="6" placeholder="貼上讓你起疑的訊息…&#10;&#10;新聞標題、社群貼文，或朋友傳來的一句話。"></textarea>
       <div class="input-meta"><span>只傳送搜尋關鍵詞，不傳送完整訊息</span><span>10,000 字以內</span></div>
-      <div class="composer-options"><label class="check-line"><input id="online" type="checkbox" checked><span>搜尋公開查核報告</span></label><details class="advanced"><summary>進階設定 <span>⌄</span></summary><div class="advanced-body"><label for="cutoff">證據截止日期</label><input id="cutoff" type="date"><small>只使用此日期以前、日期已知的來源。</small></div></details><select id="mode" hidden aria-label="分析模式"><option value="rules">規則輔助</option></select></div>
+      <div class="subject-field"><label for="subject">查核對象 <span>選填，訊息不完整時請補充</span></label><input id="subject" maxlength="80" placeholder="例如：手機、某個地區的選舉、某項食品"><small>原始訊息會保留；這裡只補充檢索脈絡，不會替你推定意思。</small></div><div class="composer-options"><label class="check-line"><input id="online" type="checkbox" checked><span>搜尋公開查核報告</span></label><details class="advanced"><summary>進階設定 <span>⌄</span></summary><div class="advanced-body"><label for="cutoff">證據截止日期</label><input id="cutoff" type="date"><small>只使用此日期以前、日期已知的來源。</small></div></details><select id="mode" hidden aria-label="分析模式"><option value="rules">規則輔助</option></select></div>
       <button class="primary wide" id="analyze" type="submit"><span>開始查核</span><span class="button-arrow">↗</span></button>
      </form>
      <div class="try-examples"><span>試試看</span><button data-example="雞蛋殼顏色越深，營養價值越高。">雞蛋顏色與營養 <span>↗</span></button><button data-example="不領公投票就會影響公投通過門檻。">公投門檻的傳言 <span>↗</span></button></div>

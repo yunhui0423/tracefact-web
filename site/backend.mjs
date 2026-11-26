@@ -1,5 +1,8 @@
 
 function decodeChunks(chunks){return new TextDecoder().decode(Uint8Array.from(chunks.flatMap(chunk=>Array.from(chunk))));}
+
+
+
 const verdicts = ['支持', '反駁', '證據衝突', '證據不足'];
 const relations = ['支持', '反駁', '無關', '待確認'];
 function fail(message, status = 400) { const e = new Error(message); e.status = status; throw e; }
@@ -40,8 +43,20 @@ function splitClaims(value) {
   const parts = value.match(/[^。！？!?\n]+[。！？!?]?/gu) || [value];
   return [...new Set(parts.map(x => x.trim()).filter(Boolean))].slice(0, 12).map(t => ({ text: t, anchor: t }));
 }
+const RETRIEVAL_STOP = new Set(['不能','就不能','能不能','不會','就會','可以','不可以','能夠','不能夠','沒有','不是','就是','是否','是不是','真的','假的','真假','一定','只要','就能','都會','還會','也會','應該','可能','需要','必須','不用','不必','不要','不應該','無法','有人','大家','我們','你們','這個','那個','這些','那些','一個','所有','全部','每天','今天','明天','最近','平日','週末','晚上','開放','影響','通過','越高','越深','表示','指出','聲稱','宣稱','消息','網路','網傳','流傳','傳言','查核','查證','分享','轉傳','因為','所以','如果','但是','而且','一直','非常','比較','更多','越來越','怎麼','如何','什麼','這樣','那樣']);
+function retrievalProfile(value) {
+  const clean=String(value).normalize('NFKC').toLowerCase().replace(/https?:\/\/\S+|[\w.+-]+@[\w.-]+\.[a-z]+/gi,' ');
+  const words=[...new Intl.Segmenter('zh-Hant',{granularity:'word'}).segment(clean)].filter(x=>x.isWordLike).map(x=>x.segment);
+  const terms=[...new Set(words.filter(w=>w.length>=2&&w.length<=40&&!RETRIEVAL_STOP.has(w)&&!/^\d+$/.test(w)&&!(/^[一二三四五六七八九十百零兩]+(?:點|時|日|月|年)?$/.test(w))&&!/^(?:就|都|也|還)?(?:不|沒)?(?:能|會|可以|一定|可能|必須|需要|應該|不能|不會)$/.test(w)))].slice(0,12);
+  return {terms,minimum:terms.length===1?1:Math.max(2,Math.ceil(terms.length*.5)),needs_context:terms.length===0,reason:terms.length?'只比對完整關鍵詞；仍需人工確認對象與上下文。':'這句話缺少可明確檢索的對象或主題，暫不推薦證據。請補充在說誰、什麼設備或事件，以及具體條件。'};
+}
+function relevance(query,source) {
+  const p=retrievalProfile(query),body=`${source.title||''}\n${source.content||''}`.normalize('NFKC').toLowerCase();
+  const matched=p.terms.filter(term=>body.includes(term));
+  return {accepted:!p.needs_context&&matched.length>=p.minimum,matched,required:p.minimum,terms:p.terms};
+}
 function rank(query, sources, cutoff = '', limit = 6) {
-  const eligible = sources.filter(s => !cutoff || (s.published && s.published <= cutoff));
+  const eligible = sources.filter(s => (!cutoff || (s.published && s.published <= cutoff))&&relevance(query,s).accepted);
   const docs = eligible.map(s => tokens(`${s.title} ${s.content}`));
   const terms = [...new Set(tokens(query))], avg = docs.reduce((n, d) => n + d.length, 0) / (docs.length || 1);
   return eligible.map((s, i) => {
@@ -54,7 +69,7 @@ function rank(query, sources, cutoff = '', limit = 6) {
     }
     const chunks = s.content.match(/[^。！？!?\n]+[。！？!?]?/gu) || [s.content];
     const quote = chunks.map(t => t.trim()).sort((a, b) => similarity(query, b) - similarity(query, a))[0].slice(0, 800);
-    return { ...s, score: Number(score.toFixed(4)), quote, relation: '待確認', note: '詞彙相關性不代表支持或反駁，請閱讀原文覆核。' };
+    return { ...s, matched_terms:relevance(query,s).matched, score: Number(score.toFixed(4)), quote, relation: '待確認', note: '通過完整關鍵詞篩選；尚未確認語意、對象或支持／反駁關係，請閱讀原文覆核。' };
   }).filter(s => s.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
 }
 function graph(sources) {
@@ -132,10 +147,7 @@ const STOP = new Set(['網路','網傳','流傳','消息','有人','表示','指
 
 // Only keywords are sent to the public service, never the whole original message.
 function searchTerms(value) {
-  const clean = value.normalize('NFKC').replace(/https?:\/\/\S+/g, '').replace(/[\w.+-]+@[\w.-]+\.[a-z]+/gi, '').replace(/\b\d{7,}\b/g, '');
-  const words = [...new Intl.Segmenter('zh-Hant', { granularity: 'word' }).segment(clean)]
-    .filter(s => s.isWordLike).map(s => s.segment).filter(s => s.length >= 2 && s.length <= 30 && !STOP.has(s));
-  const distinct = [...new Set(words)].slice(0, 8);
+  const distinct = retrievalProfile(value).terms.filter(s=>!STOP.has(s)&&!/^\d{7,}$/.test(s)).slice(0,8);
   if (!distinct.length) return [];
   const first = distinct.slice(0, 3).join(' ').slice(0, 100);
   const longest = [...distinct].sort((a,b) => b.length-a.length).slice(0, 2);
@@ -191,7 +203,7 @@ function publicSourceClient({ fetcher = fetch, now = () => Date.now() } = {}) {
       try {const r=await posts(query);requests.push({query:query || '最新查核報告',cached:r.cached,count:r.sources.length});for(const s of r.sources)items.set(s.url,s);}
       catch(e){ errors.push(`${query || '最新報告'}：${e.name==='TimeoutError'?'連線逾時':e.message}`); }
     }
-    return {provider:'台灣事實查核中心',provider_url:ORIGIN,sources:[...items.values()],queries:queries.filter(Boolean),requests,errors,checked_at:new Date(now()).toISOString(),scope:'僅搜尋台灣事實查核中心公開報告；不是全網搜尋。摘要可能不足以確認主張，請開啟原文。'};
+    return {provider:'台灣事實查核中心',provider_url:ORIGIN,sources:[...items.values()].filter(s=>!value||relevance(value,s).accepted),queries:queries.filter(Boolean),requests,errors,checked_at:new Date(now()).toISOString(),scope:'僅搜尋台灣事實查核中心公開報告；不是全網搜尋。摘要可能不足以確認主張，請開啟原文。'};
   }
   return {name:'台灣事實查核中心',async collect(value='') {
     // Serialize public requests to avoid bursts. Identical queries use the 30-minute cache.
@@ -209,10 +221,10 @@ const demo=[
   {"title":"【虛構】青禾學院工作坊中文宣傳","url":"https://campus.example.invalid/zh/atelier","published":"2026-10-04","language":"zh-TW","demo":true,"license":"專案自製虛構示例，可自由用於展示","cites":["https://campus.example.invalid/fr/atelier"],"content":"【虛構展示資料】青禾學院資訊查核工作坊免費開放所有人參加，不必事先報名。此中文宣傳與所引用的法文說明存在範圍及報名條件差異，請人工核對。"}
 ]
 ;
-
 const liveCollector=publicSourceClient();
 let feedTime='';
 const collector={name:liveCollector.name,async collect(value=''){
+  if(value&&retrievalProfile(value).needs_context)return {provider:liveCollector.name,sources:[],queries:[],errors:[],found:0,needs_context:true,scope:retrievalProfile(value).reason};
   const live=await liveCollector.collect(value);
   if(live.sources.length&&!live.errors.length)return live;
   try{
@@ -220,7 +232,7 @@ const collector={name:liveCollector.name,async collect(value=''){
     if(!response.ok)throw new Error('找不到公開摘要資料');
     const feed=await response.json();feedTime=feed.updated_at;
     if(!Array.isArray(feed.sources)||feed.sources.length>1000)throw new Error('摘要資料格式錯誤');
-    const terms=searchTerms(value), selected=value?feed.sources.filter(s=>terms.some(t=>(s.title+' '+s.content).includes(t))):feed.sources.slice(0,30);
+    const terms=searchTerms(value), selected=value?feed.sources.filter(s=>relevance(value,s).accepted):feed.sources.slice(0,30);
     return {...live,sources:selected,queries:terms,errors:[],scope:'原站即時連線不可用，改查網站最近 '+feed.sources.length+' 則公開摘要；資料更新 '+feed.updated_at+'。只含單一機構，非全網搜尋。',snapshot_at:feed.updated_at};
   }catch(e){return {...live,errors:[...live.errors,'備援摘要：'+e.message]};}
 }};
@@ -315,7 +327,7 @@ const handler = {
       if(!['GET','POST','PATCH'].includes(request.method))fail('不支援的方法',405);
       const store=browserStore();
       if(path==='/api/status'&&request.method==='GET'){
-        const sources=await store.sources();return reply({version:'3.0.0-pages',feed_updated_at:feedTime,sources:sources.length,automatic_sources:sources.filter(s=>s.automatic).length,cases:(await store.list()).length,ai:cloudAI,public_sources:{name:collector.name,last_collection:null},user:{signed_in:false,anonymous:true}});
+        const sources=await store.sources();return reply({version:'3.1.0-relevance',feed_updated_at:feedTime,sources:sources.length,automatic_sources:sources.filter(s=>s.automatic).length,cases:(await store.list()).length,ai:cloudAI,public_sources:{name:collector.name,last_collection:null},user:{signed_in:false,anonymous:true}});
       }
       if(path==='/api/sources'&&request.method==='GET')return reply(await store.sources());
       if(path==='/api/sync'&&request.method==='POST'){await readBody(request);return reply(await onlineCollect(store));}
@@ -331,7 +343,7 @@ const handler = {
         if(x.online!==undefined&&typeof x.online!=='boolean')fail('online 格式無效');
         const collection=x.online!==false?await onlineCollect(store,value):null;
         const sources=(await store.sources()).filter(s=>x.include_demo===true||!s.demo);
-        const c={id:crypto.randomUUID(),created:new Date().toISOString(),title:value.slice(0,70),input:value,cutoff,collection,include_demo:x.include_demo===true,mode:'瀏覽器規則輔助（無 AI 模型）',warning:'語氣、網址及來源數只作查核提示；未執行 AI 語意真假判讀。',claims:splitClaims(value).map(cl=>({id:crypto.randomUUID(),...cl,verdict:'證據不足',reviewed:false,reason:'',reviewer:'',evidence:rank(cl.text,sources,cutoff).map(e=>({...e,reviewed:false}))}))};
+        const c={retrieval_version:2,id:crypto.randomUUID(),created:new Date().toISOString(),title:value.slice(0,70),input:value,cutoff,collection,include_demo:x.include_demo===true,mode:'瀏覽器規則輔助（無 AI 模型）',warning:'語氣、網址及來源數只作查核提示；未執行 AI 語意真假判讀。',claims:splitClaims(value).map(cl=>({id:crypto.randomUUID(),...cl,retrieval:retrievalProfile(cl.text),verdict:'證據不足',reviewed:false,reason:'',reviewer:'',evidence:rank(cl.text,sources,cutoff).map(e=>({...e,reviewed:false}))}))};
         const used=new Set(c.claims.flatMap(cl=>cl.evidence.map(e=>e.id)));c.graph=graph(sources.filter(s=>used.has(s.id)));
         await store.save(c);return reply(c,201);
       }
@@ -349,7 +361,7 @@ const handler = {
           let reset=false;
           if(x.source_id){const s=(await store.sources()).find(s=>s.id===x.source_id);if(!s)fail('找不到來源',404);if(s.demo&&!c.include_demo)fail('一般查核不使用虛構來源');if(c.cutoff&&(!s.published||s.published>c.cutoff))fail('來源超過證據截止日期');if(cl.evidence.some(e=>e.id===s.id)||cl.evidence.length>=12)fail('來源已存在或超過上限');cl.evidence.push({...s,score:0,quote:s.content.slice(0,800),relation:'待確認',reviewed:false,note:'手動選取候選證據'});reset=true;}
           else if(x.evidence_id){const e=cl.evidence.find(e=>e.id===x.evidence_id);if(!e)fail('找不到證據',404);if(!relations.includes(x.relation))fail('證據關係無效');const quote=text(x.quote,'引文',800);if(quote.length<4||!e.content.includes(quote))fail('引文必須至少四字且存在於來源');Object.assign(e,{relation:x.relation,quote,note:text(x.note||'人工確認','註記',1000),reviewed:true});reset=true;}
-          else if(x.text!==undefined){cl.text=text(x.text,'主張',2000);cl.evidence=rank(cl.text,(await store.sources()).filter(s=>c.include_demo||!s.demo),c.cutoff).map(e=>({...e,reviewed:false}));reset=true;}
+          else if(x.text!==undefined){cl.text=text(x.text,'主張',2000);cl.retrieval=retrievalProfile(cl.text);cl.evidence=rank(cl.text,(await store.sources()).filter(s=>c.include_demo||!s.demo),c.cutoff).map(e=>({...e,reviewed:false}));reset=true;}
           else{
             if(!verdicts.includes(x.verdict))fail('結論無效');const support=cl.evidence.some(e=>e.reviewed&&e.relation==='支持'),refute=cl.evidence.some(e=>e.reviewed&&e.relation==='反駁');
             if((x.verdict==='支持'&&(!support||refute))||(x.verdict==='反駁'&&(!refute||support))||(x.verdict==='證據衝突'&&(!support||!refute)))fail('結論與已確認證據不一致');
@@ -365,3 +377,4 @@ const handler = {
 };
 
 export async function localResponse(path,method='GET',data){return handler.fetch(new Request('https://tracefact.invalid'+path,{method,headers:data===undefined?{}:{'Content-Type':'application/json'},body:data===undefined?undefined:JSON.stringify(data)}),{});}
+export {rank,retrievalProfile};

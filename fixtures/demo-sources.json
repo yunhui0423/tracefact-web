@@ -1,0 +1,7 @@
+[
+  {"title":"【虛構】青禾校園圖書館開放時間公告","url":"https://library.example.invalid/notices/2026-hours","published":"2026-10-01","language":"zh-TW","demo":true,"license":"專案自製虛構示例，可自由用於展示","cites":[],"content":"【虛構展示資料，並非真實學校公告】青禾校園圖書館自2026年10月起，平日開放至晚上九點。週末開放至下午五點。期末考週延長至晚上十一點，僅適用2026年12月14日至18日。"},
+  {"title":"【虛構】學生報轉載圖書館公告","url":"https://student.example.invalid/library-news","published":"2026-10-02","language":"zh-TW","demo":true,"license":"專案自製虛構示例，可自由用於展示","cites":["https://library.example.invalid/notices/2026-hours"],"content":"【虛構展示資料】依青禾校園圖書館公告，平日開放至晚上九點。週末開放至下午五點。期末考週延長至晚上十一點，僅適用2026年12月14日至18日。"},
+  {"title":"【虛構】去年圖書館考週公告","url":"https://library.example.invalid/notices/2025-exams","published":"2025-12-01","language":"zh-TW","demo":true,"license":"專案自製虛構示例，可自由用於展示","cites":[],"content":"【虛構展示資料】青禾校園圖書館於2025年12月15日至19日的期末考週，平日開放至午夜十二點。本公告不適用其他年份或日期。"},
+  {"title":"【虛構】青禾學院法文版活動說明","url":"https://campus.example.invalid/fr/atelier","published":"2026-10-03","language":"fr","demo":true,"license":"專案自製虛構示例，可自由用於展示","cites":[],"content":"EXEMPLE FICTIF. L'atelier de vérification des informations est gratuit pour les étudiants inscrits. L'inscription préalable est obligatoire. Le nombre de places est limité à vingt. 中文關鍵詞：資訊查核工作坊、免費、在學學生、事先報名、二十名。"},
+  {"title":"【虛構】青禾學院工作坊中文宣傳","url":"https://campus.example.invalid/zh/atelier","published":"2026-10-04","language":"zh-TW","demo":true,"license":"專案自製虛構示例，可自由用於展示","cites":["https://campus.example.invalid/fr/atelier"],"content":"【虛構展示資料】青禾學院資訊查核工作坊免費開放所有人參加，不必事先報名。此中文宣傳與所引用的法文說明存在範圍及報名條件差異，請人工核對。"}
+]

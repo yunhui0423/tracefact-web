@@ -1,0 +1,13 @@
+import {readFileSync,writeFileSync} from 'node:fs';
+const root=new URL('../',import.meta.url),read=p=>readFileSync(new URL(p,root),'utf8');
+const strip=s=>s.replace(/^import .*?;\r?\n/gm,'').replace(/\bexport (?=(?:const|function|async function))/g,'');
+let engine=strip(read('lib/engine.mjs')).replace(/function fingerprint\(value\) \{[^\n]+\}/,`async function fingerprint(value){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value.normalize('NFKC').replace(/\\s+/g,'').toLowerCase()));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');}`);
+let bundle=read('site/backend.mjs');
+const start=bundle.indexOf('const verdicts ='),end=bundle.indexOf('const domainToUnicode');
+if(start<0||end<0)throw Error('Engine bundle markers missing');
+bundle=bundle.slice(0,start)+engine+'\n'+bundle.slice(end);
+const providerStart=bundle.indexOf("const ORIGIN ="),providerEnd=bundle.indexOf('const liveCollector=');
+let provider=strip(read('lib/public-sources.mjs')).replace("Buffer.concat(chunks).toString('utf8')","await new Blob(chunks).text()").replace(",\x27User-Agent\x27:\x27TraceFact-AI/1.1 (+https://github.com/yunhui0423/tracefact-ai)\x27",'');
+if(providerStart<0||providerEnd<0)throw Error('Provider bundle markers missing');
+bundle=bundle.slice(0,providerStart)+provider+'\nconst demo='+read('fixtures/demo-sources.json')+';\n'+bundle.slice(providerEnd);
+writeFileSync(new URL('site/backend.mjs',root),bundle);
